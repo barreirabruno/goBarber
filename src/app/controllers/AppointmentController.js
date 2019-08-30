@@ -1,8 +1,10 @@
 import * as Yup from 'yup';
-import { startOfHour, parseISO, isBefore } from 'date-fns';
+import { startOfHour, parseISO, isBefore, format } from 'date-fns';
+import pt from 'date-fns/locale/pt';
 import Appointment from '../models/Appointment';
 import File from '../models/Files';
 import User from '../models/User';
+import Notification from '../schemas/Notifications';
 
 class AppointmentController {
   async index(req, res) {
@@ -43,7 +45,16 @@ class AppointmentController {
       return res.status(400).json({ error: 'Validation fails' });
     }
 
+    // eslint-disable-next-line camelcase
     const { provider_id, date } = req.body;
+
+    /** User cant create an appointment with himself */
+    // eslint-disable-next-line camelcase
+    if (req.userId === provider_id) {
+      return res
+        .status(401)
+        .json({ error: 'You cannot create an appointment with the same user' });
+    }
 
     /** Check if provider_id is a provider */
     const isProvider = await User.findOne({
@@ -83,6 +94,19 @@ class AppointmentController {
       user_id: req.userId,
       provider_id,
       date,
+    });
+
+    const user = await User.findByPk(req.userId);
+    const formattedDate = format(
+      hourStart,
+      "'dia' dd 'de' MMMM', ás' H:mm'h'",
+      { locale: pt }
+    );
+
+    /** Notify appointment provider */
+    await Notification.create({
+      content: `Novo agendamento de ${user.name} para ${formattedDate}`,
+      user: provider_id,
     });
 
     return res.json(appointment);
